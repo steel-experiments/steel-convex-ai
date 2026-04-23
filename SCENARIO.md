@@ -202,16 +202,19 @@ flight or a scrape to show, then animates in — left pane shrinks from
 full width to half, right slides in. Use motion/react.
 
 Behavior:
-- Constant OWNER_ID = "demo-alice" (swapped on camera for tenancy).
-- On mount, create a thread via api.chat.createThreadForOwner.
+- Two hardcoded tenants "alice" and "bob". State keeps a per-owner
+  map of threadIds so toggling preserves each tenant's conversation.
+- On mount (or when flipping to a tenant with no thread yet), create
+  one via api.chat.createThreadForOwner and cache it.
 - Subscribe to messages via useThreadMessages with { stream: true }.
 - Subscribe to api.scrape.latestForOwner({ ownerId }) for the pane.
-- Sending calls api.chat.sendMessage, disables input, auto-scrolls.
+- Sending calls api.chat.sendMessage with the current owner.
 - While sending, show <Spinner /> next to "thinking…" in the chat.
-- A small "Clear" button in the top-right of the left pane's header
-  calls api.scrape.clearForOwner, resets threadId to null (which
-  triggers a fresh thread), and clears the input — a clean slate
-  between takes.
+- "Clear" button (top-right of left header) wipes the current owner's
+  scrape cache and drops their thread.
+- Footer has "owner: [alice] [bob]" pills. Clicking one switches the
+  whole UI to that tenant — this is how multi-tenancy is demoed on
+  camera, instead of editing code.
 
 Dark only, minimal. Animations only for the split-screen transition
 and the spinner.
@@ -306,25 +309,19 @@ property the morning of recording.
 
 ## Step 11 — Multi-tenancy swap (5:35–5:55)
 
-In `src/App.tsx`, change:
+Click the `[bob]` pill in the footer. The whole UI instantly swaps to
+Bob: empty chat, empty pane. Ask a different question about a different
+URL. Bob's chat fills; Bob's pane renders. Click `[alice]` again —
+Alice's earlier conversation is still there, with her page still in
+the pane. Open Convex dashboard → `agent.threads`: two distinct
+`userId` rows.
 
-```ts
-const OWNER_ID = "demo-alice";
-```
+Say:
 
-to:
-
-```ts
-const OWNER_ID = "demo-bob";
-```
-
-Reload the browser. Ask a different question. Open Convex dashboard →
-`agent.threads`. Show two rows with different `userId`s, each with their
-own messages. Say:
-
-> "That's multi-tenancy, basically for free. One string, ownerId, and
-> Alice's stuff stays out of Bob's stuff. No session-ownership scheme to
-> invent."
+> "That's multi-tenancy, basically for free. One string — ownerId —
+> and Alice's stuff stays out of Bob's stuff. No session-ownership
+> scheme to invent. And yeah, toggling back shows Alice's data right
+> where she left it, because it's all just rows in the database."
 
 ## Step 12 — What you could build (5:55–6:25)
 
@@ -367,7 +364,8 @@ Say:
 - [ ] Convex dashboard rows in `agent.*`, `steel.*`, and `scrapeCache`.
 - [ ] `curl` on a JS-heavy URL returning an empty shell, then Steel
       rendering the same URL.
-- [ ] `OWNER_ID` swap producing two isolated threads.
+- [ ] Footer pill-toggle swapping alice ↔ bob, each with their own
+      chat history and pane content preserved.
 
 ## Out of scope for the main build
 

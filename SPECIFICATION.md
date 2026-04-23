@@ -238,17 +238,24 @@ from full width to half, and the right slides in. Use motion/react for
 the left-pane width transition.
 
 Behavior:
-- Constant OWNER_ID = "demo-alice" (swapped live on camera for tenancy).
-- On mount, create a thread via api.chat.createThreadForOwner.
+- Two tenants hardcoded: "alice" and "bob". State keeps a per-owner
+  map of { ownerId → threadId } so toggling between them preserves
+  each owner's conversation instead of resetting.
+- On mount (or when switching to a tenant with no thread yet), create
+  a thread via api.chat.createThreadForOwner and cache the id under
+  that ownerId.
 - Subscribe to messages via useThreadMessages with { stream: true }.
-- Subscribe to api.scrape.latestForOwner({ ownerId }) for the pane.
-- Sending calls api.chat.sendMessage, disables input, auto-scrolls.
-- While sending, show <Spinner /> next to "thinking…" in the chat bubble.
-- A small "Clear" button lives in the top-right of the left pane's
-  header. On click it calls api.scrape.clearForOwner, resets threadId
-  to null (which triggers a fresh thread), and clears the input. This
-  gives a clean slate between takes — important because the pane is
-  backed by Convex state that survives page refresh.
+- Subscribe to api.scrape.latestForOwner({ ownerId }) for the pane —
+  this auto-switches when the owner toggle flips.
+- Sending calls api.chat.sendMessage with the current ownerId,
+  disables input, auto-scrolls.
+- While sending, show <Spinner /> next to "thinking…" in the chat.
+- A "Clear" button in the top-right of the left pane's header calls
+  api.scrape.clearForOwner for the current owner, drops their cached
+  threadId (triggering a fresh thread), and clears the input.
+- A tiny owner pill-toggle in the footer — "owner: [alice] [bob]" —
+  lets you switch tenants on click. This is how multi-tenancy gets
+  demoed on camera instead of editing code.
 
 Dark only, minimal. Animations only for the split-screen transition
 and the spinner.
@@ -284,8 +291,9 @@ was stainless steel invented?". Expected:
       `scrapeCache`, and several messages in `agent.messages`.
 - [ ] Second send of the SAME URL within 10 minutes does not create a new
       `steel.sessions` row — the cache is doing its job.
-- [ ] Changing `OWNER_ID` in `src/App.tsx` to a different string produces
-      a separate thread in `agent.threads` with a distinct `userId`.
+- [ ] Clicking the `[alice]` / `[bob]` pill-toggle in the footer swaps
+      the chat and pane to that tenant's data. Two distinct `userId`
+      rows appear in `agent.threads`.
 - [ ] The assistant bubble fills in gradually as tokens arrive (streaming),
       not all at once at the end.
 - [ ] The assistant reply renders markdown: bold, italics, links, lists

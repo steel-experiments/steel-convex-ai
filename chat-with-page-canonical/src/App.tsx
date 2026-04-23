@@ -13,20 +13,24 @@ import { Markdown } from "@/components/Markdown";
 import { Spinner } from "@/components/Spinner";
 import { ScrapedPagePane } from "@/components/ScrapedPagePane";
 
-const OWNER_ID = "demo-alice";
+const OWNERS = ["alice", "bob"] as const;
+type OwnerId = (typeof OWNERS)[number];
 
 export default function App() {
-  const [threadId, setThreadId] = useState<string | null>(null);
+  const [ownerId, setOwnerId] = useState<OwnerId>("alice");
+  const [threadsByOwner, setThreadsByOwner] = useState<
+    Record<string, string>
+  >({});
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  const threadId = threadsByOwner[ownerId] ?? null;
+
   const createThread = useMutation(api.chat.createThreadForOwner);
   const sendMessage = useAction(api.chat.sendMessage);
   const clearForOwner = useMutation(api.scrape.clearForOwner);
-  const latestScrape = useQuery(api.scrape.latestForOwner, {
-    ownerId: OWNER_ID,
-  });
+  const latestScrape = useQuery(api.scrape.latestForOwner, { ownerId });
 
   const { results: messages = [] } = useThreadMessages(
     api.chat.listThreadMessages,
@@ -35,8 +39,12 @@ export default function App() {
   );
 
   useEffect(() => {
-    if (!threadId) createThread({ ownerId: OWNER_ID }).then(setThreadId);
-  }, [threadId, createThread]);
+    if (!threadId) {
+      createThread({ ownerId }).then((id) =>
+        setThreadsByOwner((prev) => ({ ...prev, [ownerId]: id })),
+      );
+    }
+  }, [threadId, ownerId, createThread]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -49,17 +57,21 @@ export default function App() {
     setInput("");
     setSending(true);
     try {
-      await sendMessage({ threadId, ownerId: OWNER_ID, prompt });
+      await sendMessage({ threadId, ownerId, prompt });
     } finally {
       setSending(false);
     }
   };
 
   const handleClear = async () => {
-    setThreadId(null);
+    setThreadsByOwner((prev) => {
+      const next = { ...prev };
+      delete next[ownerId];
+      return next;
+    });
     setInput("");
     setSending(false);
-    await clearForOwner({ ownerId: OWNER_ID });
+    await clearForOwner({ ownerId });
   };
 
   const uiMessages = toUIMessages(messages).filter(
@@ -159,8 +171,22 @@ export default function App() {
             </Button>
           </form>
 
-          <div className="mt-3 text-xs text-muted-foreground">
-            owner: <code className="text-foreground">{OWNER_ID}</code>
+          <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+            <span>owner:</span>
+            {OWNERS.map((id) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setOwnerId(id)}
+                className={
+                  id === ownerId
+                    ? "rounded-full bg-primary px-2.5 py-0.5 font-medium text-primary-foreground"
+                    : "rounded-full border border-border px-2.5 py-0.5 hover:text-foreground"
+                }
+              >
+                {id}
+              </button>
+            ))}
           </div>
         </div>
       </motion.section>
