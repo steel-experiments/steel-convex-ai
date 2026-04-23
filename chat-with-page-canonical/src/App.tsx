@@ -73,9 +73,21 @@ export default function App() {
     await clearForOwner({ ownerId });
   };
 
+  // Keep user messages, and only the assistant messages that actually have
+  // visible text. An assistant step with just a tool call renders as an empty
+  // bubble otherwise.
   const uiMessages = toUIMessages(messages).filter(
-    (m) => m.role === "user" || m.role === "assistant",
+    (m) =>
+      m.role === "user" ||
+      (m.role === "assistant" && (m.text ?? "").trim().length > 0),
   );
+
+  // Only show "thinking…" until the assistant's streamed reply starts
+  // landing; once there's visible assistant text at the bottom, the spinner
+  // below it is redundant.
+  const lastVisible = uiMessages[uiMessages.length - 1];
+  const showThinking =
+    sending && (!lastVisible || lastVisible.role !== "assistant");
 
   // Right pane appears once a message is in flight or a scrape exists.
   const paneVisible = sending || !!latestScrape;
@@ -142,7 +154,7 @@ export default function App() {
               </div>
             ))}
 
-            {sending && (
+            {showThinking && (
               <div className="mr-auto flex items-center gap-2 rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
                 <Spinner />
                 <span>thinking…</span>
