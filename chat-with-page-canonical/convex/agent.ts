@@ -4,6 +4,7 @@
 import { Agent, createTool, stepCountIs } from "@convex-dev/agent";
 import { openai } from "@ai-sdk/openai";
 import { SteelComponent } from "@steel-dev/convex";
+import { NodeHtmlMarkdown } from "node-html-markdown";
 import { z } from "zod";
 import { components, internal } from "./_generated/api";
 
@@ -12,6 +13,11 @@ const steel = new SteelComponent(components.steel, {
 });
 
 const CHUNK_CHARS = 25_000;
+
+// Steel's markdown extractor drops the main article body on some sites
+// (e.g. LessWrong returns only title + footnotes). Fetch HTML and convert
+// on our side so every site renders consistently.
+const htmlToMarkdown = new NodeHtmlMarkdown();
 
 type ScrapeToolResult = {
   title: string;
@@ -63,23 +69,24 @@ const scrapePage = createTool({
     if (!cached) {
       const result = (await steel.steel.scrape(
         ctx,
-        { url, commandArgs: { format: ["markdown"] } },
+        { url, commandArgs: { format: ["html"], delay: 100 } },
         { ownerId },
       )) as {
-        content?: { markdown?: string };
+        content?: { html?: string };
         metadata?: { title?: string };
       } | null;
-      const markdown = result?.content?.markdown ?? "";
-      if (!markdown) {
+      const html = result?.content?.html ?? "";
+      if (!html) {
         return {
           title: "",
           chunk: "",
           chunkIndex: 0,
           totalChunks: 0,
           hasMore: false,
-          error: "Page returned no markdown content.",
+          error: "Page returned no HTML content.",
         };
       }
+      const markdown = htmlToMarkdown.translate(html);
       const title = result?.metadata?.title ?? url;
       const chunks = chunkMarkdown(markdown);
       await ctx.runMutation(internal.scrape.putCached, {
