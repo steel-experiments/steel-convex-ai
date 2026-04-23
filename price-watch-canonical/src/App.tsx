@@ -7,10 +7,12 @@ import { api } from "../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/Spinner";
 
-const REGION_FLAGS: Record<string, string> = {
-  US: "🇺🇸 US",
-  GB: "🇬🇧 GB",
-  DE: "🇩🇪 DE",
+// Steel's deployment regions (airport codes). Each probe also goes through
+// a random residential proxy IP, which is what actually catches A/B variance.
+const REGION_LABELS: Record<string, string> = {
+  lax: "LAX",
+  ord: "ORD",
+  iad: "IAD",
 };
 
 function formatTime(ms: number) {
@@ -131,7 +133,7 @@ export default function App() {
                     key={r}
                     className="px-4 py-2 text-left font-medium"
                   >
-                    {REGION_FLAGS[r] ?? r}
+                    {REGION_LABELS[r] ?? r}
                   </th>
                 ))}
               </tr>

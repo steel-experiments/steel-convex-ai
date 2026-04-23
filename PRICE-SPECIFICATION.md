@@ -108,30 +108,39 @@ for latest-n lookups.
 ## Step 7 — Scraper
 
 ```
-Create convex/scraper.ts that scrapes https://claude.com/pricing
-through Steel's proxy from three parallel probes ("US", "GB", "DE" —
-these are slot labels, not geo guarantees; see notes below) and
-stores one priceSnapshots row per detected tier per probe.
+Create convex/scraper.ts that scrapes https://claude.com/pricing from
+three parallel probes running in Steel's deployment regions ("lax",
+"ord", "iad") and stores one priceSnapshots row per detected tier per
+probe.
 
-- Instantiate a SteelComponent wrapping components.steel with
-  STEEL_API_KEY from env.
+- Instantiate a SteelComponent with STEEL_API_KEY from env.
 - captureFromRegion({ region }) internalAction:
-  - calls steel.steel.scrape(ctx, { url, commandArgs: { format: ["markdown"], useProxy: true } }, { ownerId: "monitor" })
-  - reads result.content.markdown
-  - for each tier in ["Free","Pro","Max","Team","Enterprise"], finds the
-    first occurrence of the tier name in the markdown, searches the
-    next ~600 chars for a ($|€|£)N price, extracts { priceText, amount,
-    currency }
-  - writes one row per tier via an internalMutation
-- captureAll() internalAction: Promise.all over the three probes.
-- snapshotNow() public action: calls captureAll — triggered by the UI.
+  - calls steel.steel.scrape(ctx, { url, delay: 5000, commandArgs: {
+    format: ["markdown"], useProxy: true, region } }, { ownerId: "monitor" })
+  - the `delay` waits for claude.com/pricing to hydrate — without it
+    the scrape returns a nav-only stub with an "Oops!" form error
+  - reads result.content.markdown; retries once if empty or missing
+    tier names
+  - for each tier in ["Free", "Pro", "Max"] finds the first mention
+    and extracts the nearest ($|€|£)N price via a small regex
+  - writes rows via an internalMutation
+- captureAll(): Promise.all over the three probes, each wrapped in
+  try/catch. A 503 from one Steel region shouldn't blank the others.
+- snapshotNow(): public action wrapping captureAll for the UI button.
 
-Note: `useProxy: true` is boolean-only on ScrapeParams. Steel picks a
-random residential proxy per call, so three parallel probes exercise
-three IPs and catch any visitor-bucket-based A/B pricing experiment.
-True country-pinned routing requires steel.sessions.create with
-`sessionArgs: { useProxy: { geolocation: { country } } }` and scraping
-through that session — left as an extension.
+Notes:
+- Steel's `region` arg accepts airport-code slugs: currently "lax",
+  "ord", "iad". These pick where the browser workspace runs, not a
+  proxy country.
+- `useProxy: true` is boolean-only on ScrapeParams. Each scrape goes
+  through a random residential IP from Steel's pool, so three
+  parallel probes exercise three IPs and catch visitor-bucket A/B
+  experiments.
+- True country-pinned routing requires steel.sessions.create with
+  `sessionArgs: { useProxy: { geolocation: { country } } }` and
+  scraping through that session — left as an extension.
+- Enterprise is omitted because the page shows "Contact sales"
+  instead of a dollar amount.
 ```
 
 ## Step 8 — Cron
@@ -210,8 +219,9 @@ fresh probes; watch for divergences between the three rows.
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | `body/useProxy must be boolean` | Passed `useProxy` as an object on scrape | ScrapeParams only accepts boolean. Object form (`{ geolocation: { country } }`) is for sessions, not scrape. |
-| `Invalid region` on scrape | Steel's `region?: unknown` field rejects arbitrary strings | Drop `region` from scrape args; use `useProxy: true` alone and use sessions for country-pinned routing. |
-| A probe returns `inserted: 0` | Proxy IP hit a region where Anthropic's page skipped server rendering, or the tier names aren't in the markdown | Transient. Snapshot again. For resilience, fall back to `cleaned_html` or log the raw markdown for inspection. |
+| `Invalid region` on scrape | `region` expects airport slugs (`lax`, `ord`, `iad`), not country codes | Use the documented slugs; check Steel's docs for the current list. |
+| `503 status code (no body)` from Steel | One region is having a transient outage | Wrap each probe in try/catch in `captureAll` so the others still land. Retry the bad region in the next cron tick. |
+| A probe returns `inserted: 0` with no error | Page returned only the "Oops!" form-error nav stub — JS hasn't hydrated | Add `delay: 5000` (or higher) to the scrape args. Included by default in the spec above. |
 | Cron never runs | Dev deployment is paused | Convex dev deployments pause after inactivity; open the dashboard to wake it. |
 | `Missing STEEL_API_KEY` | Key set in shell, not Convex | `npx convex env set STEEL_API_KEY "$STEEL_API_KEY"` |
 

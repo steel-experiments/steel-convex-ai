@@ -99,24 +99,27 @@ capturedAt) and (capturedAt).
 ### 6b — Scraper
 
 ```
-Create convex/scraper.ts that scrapes https://claude.com/pricing
-through Steel's proxy from three parallel probes ("US", "GB", "DE" —
-these are slot labels) and stores one row per detected tier per probe.
+Create convex/scraper.ts that scrapes https://claude.com/pricing from
+three parallel probes running in Steel's regions "lax", "ord", "iad".
 
 - captureFromRegion({ region }) internalAction: call
-  steel.steel.scrape with commandArgs: { format: ["markdown"],
-  useProxy: true }, read result.content.markdown, and for each tier
-  in ["Free","Pro","Max","Team","Enterprise"] find the first mention
-  and extract the next ($|€|£)N price. Write rows via an
-  internalMutation.
-- captureAll(): Promise.all the three probes.
+  steel.steel.scrape with { delay: 5000, commandArgs: {
+  format: ["markdown"], useProxy: true, region } }. Retry once if the
+  markdown comes back empty or without any tier names. For each tier
+  in ["Free", "Pro", "Max"] find the first mention and extract the
+  nearest ($|€|£)N price. Write rows via an internalMutation.
+- captureAll(): Promise.all the three probes, each wrapped in try/
+  catch. A 503 from one Steel region shouldn't blank the dashboard.
 - snapshotNow(): public action wrapping captureAll for the UI button.
 
-Note: useProxy is boolean-only on ScrapeParams. Three parallel probes
-use three random residential IPs from Steel's pool — enough to catch
-visitor-bucket A/B experiments like Anthropic's recent one. For
-country-pinned routing, use steel.sessions.create with
-sessionArgs.useProxy.geolocation.country (not covered here).
+Notes:
+- `region` on ScrapeParams accepts airport-code slugs: "lax", "ord",
+  "iad". These are where Steel's browser runs.
+- `useProxy: true` is boolean on scrape — each probe still gets a
+  random residential IP, which is what catches visitor-bucket A/B.
+- `delay: 5000` is load-bearing: without it the page returns a nav
+  stub with "Oops!" and no tier content.
+- Enterprise is omitted — the page shows "Contact sales".
 ```
 
 While this generates, say:

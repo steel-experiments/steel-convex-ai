@@ -4,8 +4,8 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 
-const REGIONS = ["US", "GB", "DE"] as const;
-const TIERS = ["Free", "Pro", "Max", "Team", "Enterprise"] as const;
+const REGIONS = ["lax", "ord", "iad"] as const;
+const TIERS = ["Free", "Pro", "Max"] as const;
 
 async function latestFor(
   ctx: { db: { query: (t: "priceSnapshots") => any } },

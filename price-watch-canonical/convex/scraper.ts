@@ -12,14 +12,16 @@ import { SteelComponent } from "@steel-dev/convex";
 
 const TARGET_URL = "https://claude.com/pricing";
 
-// Steel supports ISO 3166-1 alpha-2 country codes for the proxy geolocation.
-// Three diverse regions chosen to maximise the chance of catching an A/B or
-// geo-targeted pricing experiment.
-const REGIONS = ["US", "GB", "DE"] as const;
+// Steel's available deployment regions (airport codes). All US-coastal today —
+// each probe still goes through a random residential proxy IP so three
+// parallel probes exercise three different IPs and catch A/B variance.
+const REGIONS = ["lax", "ord", "iad"] as const;
 
 // Tier labels we look for on the pricing page. Order doesn't matter — we
-// search for each one independently in the scraped markdown.
-const TIERS = ["Free", "Pro", "Max", "Team", "Enterprise"] as const;
+// search for each one independently in the scraped markdown. Team/Enterprise
+// are omitted: the page's pricing section only lists Free/Pro/Max with a
+// dollar amount. Enterprise shows "Contact sales", Team isn't on this page.
+const TIERS = ["Free", "Pro", "Max"] as const;
 
 const steel = new SteelComponent(components.steel, {
   STEEL_API_KEY: process.env.STEEL_API_KEY,
@@ -82,24 +84,42 @@ export const insertSnapshots = internalMutation({
 export const captureFromRegion = internalAction({
   args: { region: v.string() },
   handler: async (ctx, { region }) => {
-    const result = (await steel.steel.scrape(
-      ctx,
-      {
-        url: TARGET_URL,
-        commandArgs: {
-          format: ["markdown"],
-          // Each probe goes through a residential proxy. Steel picks a random
-          // exit per request, so three parallel probes exercise three IPs and
-          // catch any cookie/visitor-bucket A/B pricing experiments. True
-          // country-pinned routing requires sessions with Geolocation (see
-          // PRICE-SPECIFICATION's extension notes).
-          useProxy: true,
+    // Each probe runs in one of Steel's deployment regions (lax/ord/iad) with
+    // useProxy: true so the actual page request exits through a random
+    // residential IP. delay waits for the page's JS to hydrate — without it
+    // the scrape returns a stub with just the error-banner + nav links.
+    const scrape = async (): Promise<string> => {
+      const result = (await steel.steel.scrape(
+        ctx,
+        {
+          url: TARGET_URL,
+          delay: 5000,
+          commandArgs: {
+            format: ["markdown"],
+            useProxy: true,
+            region,
+          },
         },
-      },
-      { ownerId: "monitor" },
-    )) as { content?: { markdown?: string } } | null;
+        { ownerId: "monitor" },
+      )) as { content?: { markdown?: string } } | null;
+      return result?.content?.markdown ?? "";
+    };
 
-    const markdown = result?.content?.markdown ?? "";
+    // Residential proxies occasionally return an un-hydrated page with no
+    // tier text. One retry catches most of those without adding real latency
+    // on good runs.
+    let markdown = await scrape();
+    const hasTiers = (md: string) =>
+      TIERS.some((t) => md.toLowerCase().includes(t.toLowerCase()));
+    if (!markdown || !hasTiers(markdown)) {
+      console.log(
+        `[${region}] first scrape ${markdown.length} chars, no tiers — retrying`,
+      );
+      markdown = await scrape();
+    }
+    console.log(
+      `[${region}] final markdown ${markdown.length} chars, hasTiers=${hasTiers(markdown)}; preview=${JSON.stringify(markdown.slice(0, 400))}`,
+    );
     if (!markdown) return { region, inserted: 0 };
 
     const capturedAt = Date.now();
@@ -122,13 +142,23 @@ export const captureFromRegion = internalAction({
 
 export const captureAll = internalAction({
   args: {},
-  handler: async (ctx): Promise<
-    Array<{ region: string; inserted: number }>
-  > => {
+  handler: async (
+    ctx,
+  ): Promise<Array<{ region: string; inserted: number; error?: string }>> => {
+    // Wrap each probe so a transient 503 from one Steel region doesn't blank
+    // the others — we still want the UI to update with whatever landed.
     return await Promise.all(
-      REGIONS.map((region) =>
-        ctx.runAction(internal.scraper.captureFromRegion, { region }),
-      ),
+      REGIONS.map(async (region) => {
+        try {
+          return await ctx.runAction(internal.scraper.captureFromRegion, {
+            region,
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.log(`[${region}] captureFromRegion failed: ${message}`);
+          return { region, inserted: 0, error: message };
+        }
+      }),
     );
   },
 });
