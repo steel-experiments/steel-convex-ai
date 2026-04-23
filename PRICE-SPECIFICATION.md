@@ -109,9 +109,8 @@ for latest-n lookups.
 
 ```
 Create convex/scraper.ts that scrapes https://claude.com/pricing from
-three parallel probes running in Steel's deployment regions ("lax",
-"ord", "iad") and stores one priceSnapshots row per detected tier per
-probe.
+two parallel probes running in Steel's deployment regions ("lax" and
+"iad") and stores one priceSnapshots row per detected tier per probe.
 
 - Instantiate a SteelComponent with STEEL_API_KEY from env.
 - captureFromRegion({ region }) internalAction:
@@ -124,17 +123,17 @@ probe.
   - for each tier in ["Free", "Pro", "Max"] finds the first mention
     and extracts the nearest ($|€|£)N price via a small regex
   - writes rows via an internalMutation
-- captureAll(): Promise.all over the three probes, each wrapped in
+- captureAll(): Promise.all over the probes, each wrapped in
   try/catch. A 503 from one Steel region shouldn't blank the others.
 - snapshotNow(): public action wrapping captureAll for the UI button.
 
 Notes:
-- Steel's `region` arg accepts airport-code slugs: currently "lax",
-  "ord", "iad". These pick where the browser workspace runs, not a
+- Steel's `region` arg accepts airport-code slugs. Using "lax" and
+  "iad" here. These pick where the browser workspace runs, not a
   proxy country.
 - `useProxy: true` is boolean-only on ScrapeParams. Each scrape goes
-  through a random residential IP from Steel's pool, so three
-  parallel probes exercise three IPs and catch visitor-bucket A/B
+  through a random residential IP from Steel's pool, so parallel
+  probes exercise different IPs and catch visitor-bucket A/B
   experiments.
 - True country-pinned routing requires steel.sessions.create with
   `sessionArgs: { useProxy: { geolocation: { country } } }` and

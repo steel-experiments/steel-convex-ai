@@ -12,10 +12,10 @@ import { SteelComponent } from "@steel-dev/convex";
 
 const TARGET_URL = "https://claude.com/pricing";
 
-// Steel's available deployment regions (airport codes). All US-coastal today —
-// each probe still goes through a random residential proxy IP so three
-// parallel probes exercise three different IPs and catch A/B variance.
-const REGIONS = ["lax", "ord", "iad"] as const;
+// Steel's available deployment regions (airport codes). Each probe also goes
+// through a random residential proxy IP, so parallel probes exercise
+// different IPs and catch A/B variance.
+const REGIONS = ["lax", "iad"] as const;
 
 // Tier labels we look for on the pricing page. Order doesn't matter — we
 // search for each one independently in the scraped markdown. Team/Enterprise

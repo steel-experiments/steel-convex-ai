@@ -4,7 +4,7 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 
-const REGIONS = ["lax", "ord", "iad"] as const;
+const REGIONS = ["lax", "iad"] as const;
 const TIERS = ["Free", "Pro", "Max"] as const;
 
 async function latestFor(
@@ -65,6 +65,28 @@ export const history = query({
       priceText: r.priceText,
       amount: r.amount,
       currency: r.currency,
+      capturedAt: r.capturedAt,
+    }));
+  },
+});
+
+// Latest N raw snapshot rows across all regions/tiers, most recent first.
+// The UI groups them into "ticks" (captureAll runs in parallel so rows land
+// within a few seconds of each other).
+export const recent = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, { limit }) => {
+    const rows = await ctx.db
+      .query("priceSnapshots")
+      .withIndex("by_time")
+      .order("desc")
+      .take(limit ?? 60);
+    return rows.map((r) => ({
+      _id: r._id,
+      region: r.region,
+      tier: r.tier,
+      priceText: r.priceText,
+      amount: r.amount,
       capturedAt: r.capturedAt,
     }));
   },

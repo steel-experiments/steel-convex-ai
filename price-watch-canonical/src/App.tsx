@@ -11,7 +11,6 @@ import { Spinner } from "@/components/Spinner";
 // a random residential proxy IP, which is what actually catches A/B variance.
 const REGION_LABELS: Record<string, string> = {
   lax: "LAX",
-  ord: "ORD",
   iad: "IAD",
 };
 
@@ -29,6 +28,7 @@ export default function App() {
   const [snapshotting, setSnapshotting] = useState(false);
   const current = useQuery(api.prices.current);
   const divergences = useQuery(api.prices.recentDivergences);
+  const recent = useQuery(api.prices.recent, { limit: 60 });
   const snapshotNow = useAction(api.scraper.snapshotNow);
 
   const handleSnapshot = async () => {
@@ -46,6 +46,43 @@ export default function App() {
   const cells = current?.cells ?? [];
   const cellFor = (region: string, tier: string) =>
     cells.find((c) => c.region === region && c.tier === tier);
+
+  // Group recent rows into "ticks" (captureAll runs all probes in parallel
+  // so their capturedAt values cluster within a few seconds of each other).
+  // Rows within a 60s window go into the same tick.
+  type Tick = {
+    capturedAt: number;
+    byRegion: Record<string, Array<{ tier: string; priceText: string; amount?: number }>>;
+  };
+  const ticks: Tick[] = [];
+  for (const row of recent ?? []) {
+    const last = ticks[ticks.length - 1];
+    if (last && last.capturedAt - row.capturedAt < 60_000) {
+      (last.byRegion[row.region] ??= []).push({
+        tier: row.tier,
+        priceText: row.priceText,
+        amount: row.amount,
+      });
+      if (row.capturedAt < last.capturedAt) last.capturedAt = row.capturedAt;
+    } else {
+      ticks.push({
+        capturedAt: row.capturedAt,
+        byRegion: {
+          [row.region]: [
+            { tier: row.tier, priceText: row.priceText, amount: row.amount },
+          ],
+        },
+      });
+    }
+  }
+  // Tier ordering for stable rendering inside each tick.
+  const TIER_ORDER = ["Free", "Pro", "Max"] as const;
+  const orderTiers = <T extends { tier: string }>(xs: T[]) =>
+    xs
+      .slice()
+      .sort(
+        (a, b) => TIER_ORDER.indexOf(a.tier as any) - TIER_ORDER.indexOf(b.tier as any),
+      );
 
   // For each tier, compute majority amount across regions so divergent cells
   // can be tinted. A tier has a majority when >1 region shares the same value.
@@ -192,7 +229,52 @@ export default function App() {
           </table>
         </section>
 
-        <p className="mt-4 text-xs text-muted-foreground">
+        {ticks.length > 0 && (
+          <section className="mt-8">
+            <h2 className="mb-3 text-sm font-semibold tracking-tight">
+              History
+            </h2>
+            <ul className="rounded-md border border-border divide-y divide-border overflow-hidden">
+              {ticks.map((tick) => (
+                <li
+                  key={tick.capturedAt}
+                  className="flex items-start gap-4 px-4 py-3 text-xs"
+                >
+                  <span className="shrink-0 w-24 text-muted-foreground font-mono">
+                    {formatTime(tick.capturedAt)}
+                  </span>
+                  <div className="flex flex-1 flex-wrap gap-x-6 gap-y-1">
+                    {regions.map((region) => {
+                      const rows = tick.byRegion[region];
+                      if (!rows || rows.length === 0) {
+                        return (
+                          <span key={region} className="text-muted-foreground">
+                            <span className="font-medium text-foreground">
+                              {REGION_LABELS[region] ?? region}
+                            </span>{" "}
+                            —
+                          </span>
+                        );
+                      }
+                      return (
+                        <span key={region} className="font-mono">
+                          <span className="font-sans font-medium text-foreground">
+                            {REGION_LABELS[region] ?? region}
+                          </span>{" "}
+                          {orderTiers(rows)
+                            .map((r) => `${r.tier} ${r.priceText}`)
+                            .join(" · ")}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <p className="mt-6 text-xs text-muted-foreground">
           Proxy-routed via Steel. Cron runs every 10 minutes — the dashboard
           updates live as new rows land.
         </p>

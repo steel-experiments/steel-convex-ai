@@ -100,7 +100,7 @@ capturedAt) and (capturedAt).
 
 ```
 Create convex/scraper.ts that scrapes https://claude.com/pricing from
-three parallel probes running in Steel's regions "lax", "ord", "iad".
+two parallel probes running in Steel's regions "lax" and "iad".
 
 - captureFromRegion({ region }) internalAction: call
   steel.steel.scrape with { delay: 5000, commandArgs: {
@@ -108,13 +108,13 @@ three parallel probes running in Steel's regions "lax", "ord", "iad".
   markdown comes back empty or without any tier names. For each tier
   in ["Free", "Pro", "Max"] find the first mention and extract the
   nearest ($|€|£)N price. Write rows via an internalMutation.
-- captureAll(): Promise.all the three probes, each wrapped in try/
+- captureAll(): Promise.all the probes, each wrapped in try/
   catch. A 503 from one Steel region shouldn't blank the dashboard.
 - snapshotNow(): public action wrapping captureAll for the UI button.
 
 Notes:
-- `region` on ScrapeParams accepts airport-code slugs: "lax", "ord",
-  "iad". These are where Steel's browser runs.
+- `region` on ScrapeParams accepts airport-code slugs — "lax" and
+  "iad" here. These are where Steel's browser runs.
 - `useProxy: true` is boolean on scrape — each probe still gets a
   random residential IP, which is what catches visitor-bucket A/B.
 - `delay: 5000` is load-bearing: without it the page returns a nav
@@ -125,7 +125,7 @@ Notes:
 While this generates, say:
 
 > "The scraper is one function: call Steel, read the markdown, regex
-> out the prices. We fire three parallel probes per tick — three
+> out the prices. We fire two parallel probes per tick — two
 > random proxy IPs — so if Anthropic's serving different variants to
 > different visitors, we see it."
 
@@ -190,7 +190,7 @@ match this time, tap the button again or wait for the cron.
 Open the Convex dashboard:
 
 - `priceSnapshots` — one row per probe per tier. Point out that the
-  same tier across three probes are three separate rows.
+  same tier across probes are separate rows.
 - `Cron jobs` tab — "price snapshot" listed with a next-run timestamp.
 - Steel dashboard → open a recent `sessions` row → click the debug
   URL to show the proxy IP the browser actually used.
