@@ -47,42 +47,37 @@ export default function App() {
   const cellFor = (region: string, tier: string) =>
     cells.find((c) => c.region === region && c.tier === tier);
 
-  // Group recent rows into "ticks" (captureAll runs all probes in parallel
+  // Group recent rows into "ticks" (captureAll runs both probes in parallel
   // so their capturedAt values cluster within a few seconds of each other).
-  // Rows within a 60s window go into the same tick.
+  // Rows within a 60s window go into the same tick, and we keep only the
+  // newest row per (region, tier) to avoid duplicates when a single cron
+  // tick produces retries or multiple snapshots land close in time.
   type Tick = {
     capturedAt: number;
-    byRegion: Record<string, Array<{ tier: string; priceText: string; amount?: number }>>;
+    byRegion: Record<string, Record<string, { priceText: string; amount?: number }>>;
   };
+  const activeRegions = new Set<string>(regions);
   const ticks: Tick[] = [];
   for (const row of recent ?? []) {
+    // Skip rows for regions no longer in the active set (e.g. retired "ord").
+    if (!activeRegions.has(row.region)) continue;
     const last = ticks[ticks.length - 1];
-    if (last && last.capturedAt - row.capturedAt < 60_000) {
-      (last.byRegion[row.region] ??= []).push({
-        tier: row.tier,
-        priceText: row.priceText,
-        amount: row.amount,
-      });
-      if (row.capturedAt < last.capturedAt) last.capturedAt = row.capturedAt;
-    } else {
-      ticks.push({
-        capturedAt: row.capturedAt,
-        byRegion: {
-          [row.region]: [
-            { tier: row.tier, priceText: row.priceText, amount: row.amount },
-          ],
-        },
-      });
+    const inSameTick = last && last.capturedAt - row.capturedAt < 60_000;
+    const target = inSameTick ? last : undefined;
+    const tick: Tick = target ?? {
+      capturedAt: row.capturedAt,
+      byRegion: {},
+    };
+    const perRegion = (tick.byRegion[row.region] ??= {});
+    // Rows arrive newest-first (desc by capturedAt). First write wins,
+    // so we don't overwrite the freshest snapshot with an older duplicate.
+    if (!perRegion[row.tier]) {
+      perRegion[row.tier] = { priceText: row.priceText, amount: row.amount };
     }
+    if (!target) ticks.push(tick);
   }
   // Tier ordering for stable rendering inside each tick.
   const TIER_ORDER = ["Free", "Pro", "Max"] as const;
-  const orderTiers = <T extends { tier: string }>(xs: T[]) =>
-    xs
-      .slice()
-      .sort(
-        (a, b) => TIER_ORDER.indexOf(a.tier as any) - TIER_ORDER.indexOf(b.tier as any),
-      );
 
   // For each tier, compute majority amount across regions so divergent cells
   // can be tinted. A tier has a majority when >1 region shares the same value.
@@ -245,8 +240,11 @@ export default function App() {
                   </span>
                   <div className="flex flex-1 flex-wrap gap-x-6 gap-y-1">
                     {regions.map((region) => {
-                      const rows = tick.byRegion[region];
-                      if (!rows || rows.length === 0) {
+                      const perTier = tick.byRegion[region];
+                      const ordered = TIER_ORDER.filter(
+                        (t) => perTier && perTier[t],
+                      );
+                      if (!perTier || ordered.length === 0) {
                         return (
                           <span key={region} className="text-muted-foreground">
                             <span className="font-medium text-foreground">
@@ -261,8 +259,8 @@ export default function App() {
                           <span className="font-sans font-medium text-foreground">
                             {REGION_LABELS[region] ?? region}
                           </span>{" "}
-                          {orderTiers(rows)
-                            .map((r) => `${r.tier} ${r.priceText}`)
+                          {ordered
+                            .map((t) => `${t} ${perTier[t].priceText}`)
                             .join(" · ")}
                         </span>
                       );

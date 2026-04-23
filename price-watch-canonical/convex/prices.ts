@@ -2,7 +2,7 @@
 // ABOUTME: history, and a divergence check that drives the viral callout.
 
 import { v } from "convex/values";
-import { query } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 
 const REGIONS = ["lax", "iad"] as const;
 const TIERS = ["Free", "Pro", "Max"] as const;
@@ -67,6 +67,24 @@ export const history = query({
       currency: r.currency,
       capturedAt: r.capturedAt,
     }));
+  },
+});
+
+// One-off cleanup: drop rows belonging to regions no longer in REGIONS.
+// Used to purge "ord" rows after the region was retired.
+export const purgeStaleRegions = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const active = new Set<string>(REGIONS);
+    const rows = await ctx.db.query("priceSnapshots").collect();
+    let deleted = 0;
+    for (const row of rows) {
+      if (!active.has(row.region)) {
+        await ctx.db.delete(row._id);
+        deleted++;
+      }
+    }
+    return { deleted };
   },
 });
 
