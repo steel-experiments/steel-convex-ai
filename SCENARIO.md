@@ -6,7 +6,8 @@ URL, asks a question, and an AI agent answers using the live page content
 
 Stack: `@steel-dev/convex` + `@convex-dev/agent` on Convex, React + Vite
 frontend, Tailwind v4 with a dark theme (#F5D90A accent), markdown
-rendering, motion for the split-screen animation.
+rendering. The split-screen animation is a CSS grid column transition
+so it stays smooth even with 100k+ char markdown on the right.
 
 Each code step is a prompt to paste into a coding agent (Claude Code, Codex,
 Cursor, etc.) — no manual code copying.
@@ -184,11 +185,12 @@ src/components/Spinner.tsx — a React component that cycles braille
 dot frames ("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏") every ~90ms. Renders as an inline
 yellow span. Used next to "thinking…" and in the pane.
 
-src/components/ScrapedPagePane.tsx — the right-side pane that shows
-the latest scraped page. Uses motion/react to slide in from the
-right (width 0 → 50%, opacity 0 → 1, ease-out, ~450ms). Header: title
-as a link + char count. Body: rendered Markdown. Spinner while
-waiting. Exits (animates out) when there's nothing to show.
+src/components/ScrapedPagePane.tsx — renders the latest scraped page
+inside the right grid column. Header: title as a link + char count.
+Body: memoized Markdown with `contain: paint` on the scroll container.
+Spinner while waiting. The slide-in is driven by the parent grid-column
+transition (not a component animation) so it stays smooth with large
+pages.
 ```
 
 ### 7d — `src/App.tsx`
@@ -197,9 +199,10 @@ waiting. Exits (animates out) when there's nothing to show.
 Replace src/App.tsx with a two-pane chat screen.
 
 Left pane: the conversation. Right pane: the latest scraped page
-rendered as markdown. Right pane is hidden until there's a message in
-flight or a scrape to show, then animates in — left pane shrinks from
-full width to half, right slides in. Use motion/react.
+rendered as markdown. Use a CSS grid container whose
+`grid-template-columns` transitions from `1fr 0fr` to `1fr 1fr` when
+the pane becomes visible. Pure CSS — stays smooth even when the
+right pane holds a very long markdown document.
 
 Behavior:
 - Two hardcoded tenants "alice" and "bob". State keeps a per-owner

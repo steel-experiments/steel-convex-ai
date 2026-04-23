@@ -18,7 +18,9 @@ the file. This stays robust as component APIs evolve.
 - **React + Vite** — frontend scaffold.
 - **Tailwind v4** + small set of shadcn-style components.
 - **react-markdown** + **remark-gfm** — for rendering assistant replies.
-- **motion** — for the split-screen pane animation.
+- **motion** — installed for optional polish (not required for the
+  current split-screen animation, which is driven by a CSS grid
+  column transition for smoother performance on large markdown).
 
 ## Prerequisites
 
@@ -215,13 +217,13 @@ src/components/Spinner.tsx — a tiny React component that cycles
 braille dot frames ("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏") every ~90ms. Renders as an
 inline yellow span. Used next to "thinking…" and in the pane.
 
-src/components/ScrapedPagePane.tsx — the right-side pane that shows
-the latest scraped page's markdown. Uses motion/react to slide in
-from the right (width 0 → 50%, opacity 0 → 1, ease-out, ~450ms).
-Header shows the page title as a link and its char count. Body
-renders through the Markdown component. While waiting for data,
-center the Spinner. The pane exits (animates out) when there's
-nothing to show.
+src/components/ScrapedPagePane.tsx — renders the latest scraped page
+inside the right grid column. Header shows the page title as a link
+and its char count. Body renders through the memoized Markdown
+component with `contain: paint` on the scroll container. Spinner
+while waiting. The slide-in itself is the parent grid-column
+transition, not a component-level animation — this is what keeps
+it smooth when the markdown is 100k+ chars.
 ```
 
 ## Step 12 — Chat UI
@@ -232,10 +234,11 @@ Paste this into your coding agent:
 Replace src/App.tsx with a two-pane chat screen.
 
 Left pane: the conversation. Right pane: the latest scraped page,
-rendered as markdown. The right pane is hidden until there's a message
-in flight or a scrape to show, then animates in — the left pane shrinks
-from full width to half, and the right slides in. Use motion/react for
-the left-pane width transition.
+rendered as markdown. Use a CSS grid container that transitions
+`grid-template-columns` from `1fr 0fr` (pane hidden) to `1fr 1fr`
+(pane visible). The transition is a single CSS property change, which
+stays smooth even when the right pane holds a 100k+ char markdown
+tree — faster than animating width or using motion's layout prop.
 
 Behavior:
 - Two tenants hardcoded: "alice" and "bob". State keeps a per-owner

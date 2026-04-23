@@ -3,7 +3,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { motion } from "motion/react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useThreadMessages, toUIMessages } from "@convex-dev/agent/react";
 import { api } from "../convex/_generated/api";
@@ -82,16 +81,13 @@ export default function App() {
   const paneVisible = sending || !!latestScrape;
 
   return (
-    <div className="flex h-full w-full overflow-hidden">
-      <motion.section
-        layout
-        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-        className={
-          paneVisible
-            ? "flex flex-col border-r border-border w-1/2 min-w-[420px]"
-            : "flex flex-col w-full items-center"
-        }
-      >
+    <div
+      className="grid h-full w-full overflow-hidden transition-[grid-template-columns] duration-[450ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+      style={{
+        gridTemplateColumns: paneVisible ? "1fr 1fr" : "1fr 0fr",
+      }}
+    >
+      <section className="flex flex-col items-center min-w-0 overflow-hidden">
         <div
           className={
             paneVisible
@@ -189,9 +185,11 @@ export default function App() {
             ))}
           </div>
         </div>
-      </motion.section>
+      </section>
 
-      <ScrapedPagePane scrape={latestScrape ?? null} pending={sending} />
+      <aside className="overflow-hidden min-w-0">
+        <ScrapedPagePane scrape={latestScrape ?? null} pending={sending} />
+      </aside>
     </div>
   );
 }
