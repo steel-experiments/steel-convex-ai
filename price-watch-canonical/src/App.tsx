@@ -79,14 +79,29 @@ export default function App() {
   // Tier ordering for stable rendering inside each tick.
   const TIER_ORDER = ["Free", "Pro", "Max"] as const;
 
-  // A tick is divergent when any tier has two different amounts across the
-  // regions present in that tick. Used to tag the row with a pill.
+  // Compute the most-common ("typical") amount per tier across all recent
+  // snapshots — this is our baseline. A tick is divergent when any row in it
+  // disagrees with that baseline, even if only one region is present in the
+  // tick (e.g. a historical seed from before the other probe existed).
+  const modeByTier = new Map<string, number>();
+  for (const tier of TIER_ORDER) {
+    const counts = new Map<number, number>();
+    for (const row of recent ?? []) {
+      if (row.tier !== tier || typeof row.amount !== "number") continue;
+      counts.set(row.amount, (counts.get(row.amount) ?? 0) + 1);
+    }
+    const [top] = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    if (top) modeByTier.set(tier, top[0]);
+  }
+
   const isTickDivergent = (tick: Tick) => {
     for (const tier of TIER_ORDER) {
-      const amounts = Object.values(tick.byRegion)
-        .map((perTier) => perTier?.[tier]?.amount)
-        .filter((a): a is number => typeof a === "number");
-      if (amounts.length >= 2 && new Set(amounts).size > 1) return true;
+      const mode = modeByTier.get(tier);
+      if (typeof mode !== "number") continue;
+      for (const perTier of Object.values(tick.byRegion)) {
+        const amt = perTier?.[tier]?.amount;
+        if (typeof amt === "number" && amt !== mode) return true;
+      }
     }
     return false;
   };
