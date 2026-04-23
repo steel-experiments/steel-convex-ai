@@ -79,6 +79,18 @@ export default function App() {
   // Tier ordering for stable rendering inside each tick.
   const TIER_ORDER = ["Free", "Pro", "Max"] as const;
 
+  // A tick is divergent when any tier has two different amounts across the
+  // regions present in that tick. Used to tag the row with a pill.
+  const isTickDivergent = (tick: Tick) => {
+    for (const tier of TIER_ORDER) {
+      const amounts = Object.values(tick.byRegion)
+        .map((perTier) => perTier?.[tier]?.amount)
+        .filter((a): a is number => typeof a === "number");
+      if (amounts.length >= 2 && new Set(amounts).size > 1) return true;
+    }
+    return false;
+  };
+
   // For each tier, compute majority amount across regions so divergent cells
   // can be tinted. A tier has a majority when >1 region shares the same value.
   const majorityByTier = new Map<string, number | undefined>();
@@ -230,13 +242,20 @@ export default function App() {
               History
             </h2>
             <ul className="rounded-md border border-border divide-y divide-border overflow-hidden">
-              {ticks.map((tick) => (
+              {ticks.map((tick) => {
+                const divergent = isTickDivergent(tick);
+                return (
                 <li
                   key={tick.capturedAt}
                   className="flex items-start gap-4 px-4 py-3 text-xs"
                 >
-                  <span className="shrink-0 w-24 text-muted-foreground font-mono">
-                    {formatTime(tick.capturedAt)}
+                  <span className="flex shrink-0 w-36 items-center gap-2 font-mono text-muted-foreground">
+                    <span>{formatTime(tick.capturedAt)}</span>
+                    {divergent && (
+                      <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                        divergent
+                      </span>
+                    )}
                   </span>
                   <div className="flex flex-1 flex-wrap gap-x-6 gap-y-1">
                     {regions.map((region) => {
@@ -267,7 +286,8 @@ export default function App() {
                     })}
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           </section>
         )}
