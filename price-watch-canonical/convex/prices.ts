@@ -88,6 +88,21 @@ export const purgeStaleRegions = mutation({
   },
 });
 
+// Hard-delete every row for one region. Used when reseeding a historical
+// variant (e.g. the Apr 22 2026 A/B snapshot) so the "latest-per-region"
+// queries pick up only the seeded row.
+export const deleteRegionRows = mutation({
+  args: { region: v.string() },
+  handler: async (ctx, { region }) => {
+    const rows = await ctx.db
+      .query("priceSnapshots")
+      .withIndex("by_region_tier_time", (q) => q.eq("region", region))
+      .collect();
+    for (const row of rows) await ctx.db.delete(row._id);
+    return { deleted: rows.length };
+  },
+});
+
 // Latest N raw snapshot rows across all regions/tiers, most recent first.
 // The UI groups them into "ticks" (captureAll runs in parallel so rows land
 // within a few seconds of each other).
