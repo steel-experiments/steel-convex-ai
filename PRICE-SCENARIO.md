@@ -11,6 +11,19 @@ chat demo.
 
 Each code step is a prompt to paste into a coding agent.
 
+## Motivation
+
+Simon Willison's thread from April 2026 documented Anthropic running
+a live A/B pricing experiment on the Claude sign-up page — different
+visitors saw $17, $20, or higher per-month prices on the same Pro
+tier. The UI never explained why. Source:
+<https://x.com/simonw/status/2046995333687943351?s=20>
+
+This demo is the tool that would have flagged that experiment the
+moment it started: two parallel Steel probes scraping
+`claude.com/pricing` every 10 minutes and surfacing any price that
+disagrees with its peer.
+
 ## Prereqs before hitting record
 
 - Node 18+, npm.
